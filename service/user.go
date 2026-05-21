@@ -12,6 +12,8 @@ import (
 	"golang.org/x/crypto/argon2"
 )
 
+var ErrUserNotAuthenticated = fmt.Errorf("User not authenticated")
+
 type UserService struct {
 	entity *entity.UserEntity
 }
@@ -23,7 +25,7 @@ func NewUserService(e *entity.UserEntity) *UserService {
 }
 
 func (s *UserService) GetAllUsers(ctx context.Context) []domain.User {
-		return s.entity.GetAllUsers(ctx)
+	return s.entity.GetAllUsers(ctx)
 }
 
 func (s *UserService) CreateUserPassword(password string, secret []byte) (string, string, error) {
@@ -41,7 +43,7 @@ func (s *UserService) CreateUserPassword(password string, secret []byte) (string
 	return encodeHashPassword, encodeSalt, nil
 }
 
-func (s *UserService) CreateUser(ctx context.Context, user dto.CreateUserRequest) (domain.User, error) {
+func (s *UserService) CreateUser(ctx context.Context, user dto.RegisterRequest) (domain.User, error) {
 	encodePassword, encodeSalt, err := s.CreateUserPassword(user.Password, nil)
 	newUser := domain.User{
 		Email:    user.Email,
@@ -54,4 +56,8 @@ func (s *UserService) CreateUser(ctx context.Context, user dto.CreateUserRequest
 		return domain.User{}, fmt.Errorf("failed to create user: %w", err)
 	}
 	return newUser, nil
+}
+
+func (s *UserService) GetUserByEmail(ctx context.Context, email string) (domain.User, error) {
+	return s.entity.GetUserByEmail(ctx, email)
 }

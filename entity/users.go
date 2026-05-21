@@ -46,3 +46,11 @@ func (u *UserEntity) CreateUser(ctx context.Context, user domain.User) (domain.U
 	}
 	return domain.NewUser(newUser), nil
 }
+
+func (u *UserEntity) GetUserByEmail(ctx context.Context, email string) (domain.User, error) {
+	user, err := u.query.GetUserByEmail(ctx, email)
+	if err != nil {
+		return domain.User{}, fmt.Errorf("failed to get user by email: %w", err)
+	}
+	return domain.NewUser(user), nil
+}

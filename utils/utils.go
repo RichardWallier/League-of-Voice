@@ -1,6 +1,8 @@
 package utils
 
-import "crypto/rand"
+import (
+	"crypto/rand"
+)
 
 func NewSecret(length uint32) ([]byte, error){
 	secret := make([]byte, length)
