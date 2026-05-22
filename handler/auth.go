@@ -3,17 +3,25 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
+	"lov/domain"
 	"lov/dto"
 	"lov/service"
+	"lov/utils"
 	"net/http"
 )
 
 type AuthHandler struct {
-	service *service.AuthService
+	authService *service.AuthService
+	userService *service.UserService
+	tokenService *service.TokenService
 }
 
-func NewAuthHandler(s *service.AuthService) *AuthHandler {
-	return &AuthHandler{service: s}
+func NewAuthHandler(authService *service.AuthService, userService *service.UserService, tokenService *service.TokenService) *AuthHandler {
+	return &AuthHandler{
+		authService: authService,
+		userService: userService,
+		tokenService: tokenService,
+	}
 }
 
 func (h *AuthHandler) LoginHandler(w http.ResponseWriter, r *http.Request) {
@@ -26,7 +34,7 @@ func (h *AuthHandler) LoginHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "email and password are required", http.StatusBadRequest)
 		return
 	}
-	token, err := h.service.Login(r.Context(), loginRequest)
+	token, err := h.authService.Login(r.Context(), loginRequest)
 	if err != nil {
 		http.Error(w, "invalid email or password", http.StatusUnauthorized)
 		return
@@ -45,11 +53,25 @@ func (h *AuthHandler) RegisterHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "email, username and password are required", http.StatusBadRequest)
 		return
 	}
-	user, err := h.service.UserService.CreateUser(r.Context(), registerRequest)
+
+	userDomain := domain.User{
+		Email:    registerRequest.Email,
+		Username: registerRequest.Username,
+		Password: registerRequest.Password,
+	}
+	user, err := h.userService.CreateUser(r.Context(), userDomain)
 	if err != nil {
 		http.Error(w, "failed to create user", http.StatusConflict)
 		return
 	}
+
+	jwtToken, err := utils.GenerateJWTToken(r.Context(), user.Email)
+	if err != nil {
+		http.Error(w, "failed to login after registration", http.StatusInternalServerError)
+		return
+	}
+	fmt.Printf("Generated token after registration: %s\n", jwtToken)
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(user)
+	json.NewEncoder(w).Encode(map[string]string{"token": jwtToken})
 }

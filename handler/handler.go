@@ -9,7 +9,7 @@ type Handlers struct {
 
 func SetupHandlers(s *service.Services) *Handlers {
 	return &Handlers{
-		UserHandler: NewUserHandler(s.UserService),
-		AuthHandler: NewAuthHandler(s.AuthService),
+		UserHandler: NewUserHandler(s.UserService, s.TokenService),
+		AuthHandler: NewAuthHandler(s.AuthService, s.UserService, s.TokenService),
 	}
 }

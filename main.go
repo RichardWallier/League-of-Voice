@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 	"lov/db"
-	"lov/entity"
 	"lov/handler"
+	"lov/repository"
 	"lov/routes"
 	"lov/service"
 	"net/http"
@@ -19,7 +19,7 @@ func main() {
 	db := db.NewPostgresDB(ctx)
 	defer db.Cleanup()
 
-	entities := entity.NewEntities(db)
+	entities := repository.NewEntities(db)
 
 	services := service.NewServices(entities)
 

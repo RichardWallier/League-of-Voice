@@ -2,49 +2,37 @@ package service
 
 import (
 	"context"
-	"lov/entity"
-	"os"
-	"time"
-
-	"github.com/golang-jwt/jwt/v4"
+	"lov/db"
+	"lov/repository"
+	"lov/utils"
 )
 
 type TokenService struct {
-	e *entity.TokenEntity
+	tokenEntity *repository.TokenEntity
+	userEntity *repository.UserEntity
 }
 
-func NewTokenService(e *entity.TokenEntity) *TokenService {
+func NewTokenService(tokenEntity *repository.TokenEntity, userEntity *repository.UserEntity) *TokenService {
 	return &TokenService{
-		e,
+		tokenEntity: tokenEntity,
+		userEntity: userEntity,
 	}
 }
 
-func GenerateJWTToken(ctx context.Context, email string) (string, error) {
-	unsignedJwt := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"email": email,
-		"exp":   time.Now().Add(time.Minute * 15).Unix(),
-	})
-	token, err := unsignedJwt.SignedString([]byte(os.Getenv("JWT_SECRET")))
+func (t *TokenService) ValidatePermissions(ctx context.Context, tokenString string, permissions []db.Permission) (bool, error) {
+	email, err := utils.ValidateJWTToken(ctx, tokenString)
 	if err != nil {
-		return "", err
+		return false, err
 	}
-	return token, nil
-}
+	user, err := t.userEntity.GetUserByEmail(ctx, email)
+	if err != nil {
+		return false, err
+	}
 
-func ValidateJWTToken(ctx context.Context, tokenString string) (string, error) {
-	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, jwt.ErrSignatureInvalid
-		}
-		return []byte(os.Getenv("JWT_SECRET")), nil
-	})
+	missingPermissions, err := t.tokenEntity.MissingAnyPermissionsByEmail(ctx, user.ID, permissions)
 	if err != nil {
-		return "", err
+		return false, err
 	}
-	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
-		email := claims["email"].(string)
-		return email, nil
-	} else {
-		return "", jwt.ErrSignatureInvalid
-	}
+
+	return missingPermissions, nil
 }

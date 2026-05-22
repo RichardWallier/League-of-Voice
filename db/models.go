@@ -8,11 +8,37 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type Permission struct {
+	ID          int32
+	Name        string
+	Description pgtype.Text
+	CreatedAt   pgtype.Timestamp
+}
+
+type Role struct {
+	ID          int32
+	Name        string
+	Description pgtype.Text
+	CreatedAt   pgtype.Timestamp
+}
+
+type RolePermission struct {
+	RoleID       int32
+	PermissionID int32
+	CreatedAt    pgtype.Timestamp
+}
+
 type User struct {
 	ID        int32
 	Email     string
 	Username  string
 	Password  string
 	Salt      string
+	CreatedAt pgtype.Timestamp
+}
+
+type UserRole struct {
+	UserID    int32
+	RoleID    int32
 	CreatedAt pgtype.Timestamp
 }

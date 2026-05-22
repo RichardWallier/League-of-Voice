@@ -7,7 +7,87 @@ package db
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const assignPermissionToRole = `-- name: AssignPermissionToRole :exec
+INSERT INTO role_permissions (role_id, permission_id)
+VALUES ($1, $2)
+ON CONFLICT DO NOTHING
+`
+
+type AssignPermissionToRoleParams struct {
+	RoleID       int32
+	PermissionID int32
+}
+
+func (q *Queries) AssignPermissionToRole(ctx context.Context, arg AssignPermissionToRoleParams) error {
+	_, err := q.db.Exec(ctx, assignPermissionToRole, arg.RoleID, arg.PermissionID)
+	return err
+}
+
+const assignRoleToUser = `-- name: AssignRoleToUser :exec
+INSERT INTO user_roles (user_id, role_id)
+VALUES ($1, $2)
+ON CONFLICT DO NOTHING
+`
+
+type AssignRoleToUserParams struct {
+	UserID int32
+	RoleID int32
+}
+
+func (q *Queries) AssignRoleToUser(ctx context.Context, arg AssignRoleToUserParams) error {
+	_, err := q.db.Exec(ctx, assignRoleToUser, arg.UserID, arg.RoleID)
+	return err
+}
+
+const createPermission = `-- name: CreatePermission :one
+INSERT INTO permissions (name, description)
+VALUES ($1, $2)
+RETURNING id, name, description, created_at
+`
+
+type CreatePermissionParams struct {
+	Name        string
+	Description pgtype.Text
+}
+
+func (q *Queries) CreatePermission(ctx context.Context, arg CreatePermissionParams) (Permission, error) {
+	row := q.db.QueryRow(ctx, createPermission, arg.Name, arg.Description)
+	var i Permission
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Description,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createRole = `-- name: CreateRole :one
+INSERT INTO roles (name, description)
+VALUES ($1, $2)
+RETURNING id, name, description, created_at
+`
+
+type CreateRoleParams struct {
+	Name        string
+	Description pgtype.Text
+}
+
+func (q *Queries) CreateRole(ctx context.Context, arg CreateRoleParams) (Role, error) {
+	row := q.db.QueryRow(ctx, createRole, arg.Name, arg.Description)
+	var i Role
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Description,
+		&i.CreatedAt,
+	)
+	return i, err
+}
 
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (email, username, password, salt)
@@ -41,6 +121,24 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 	return i, err
 }
 
+const deletePermission = `-- name: DeletePermission :exec
+DELETE FROM permissions WHERE id = $1
+`
+
+func (q *Queries) DeletePermission(ctx context.Context, id int32) error {
+	_, err := q.db.Exec(ctx, deletePermission, id)
+	return err
+}
+
+const deleteRole = `-- name: DeleteRole :exec
+DELETE FROM roles WHERE id = $1
+`
+
+func (q *Queries) DeleteRole(ctx context.Context, id int32) error {
+	_, err := q.db.Exec(ctx, deleteRole, id)
+	return err
+}
+
 const deleteUser = `-- name: DeleteUser :exec
 DELETE FROM users WHERE id = $1
 `
@@ -48,6 +146,70 @@ DELETE FROM users WHERE id = $1
 func (q *Queries) DeleteUser(ctx context.Context, id int32) error {
 	_, err := q.db.Exec(ctx, deleteUser, id)
 	return err
+}
+
+const getPermission = `-- name: GetPermission :one
+SELECT id, name, description, created_at FROM permissions WHERE id = $1
+`
+
+func (q *Queries) GetPermission(ctx context.Context, id int32) (Permission, error) {
+	row := q.db.QueryRow(ctx, getPermission, id)
+	var i Permission
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Description,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getPermissionByName = `-- name: GetPermissionByName :one
+SELECT id, name, description, created_at FROM permissions WHERE name = $1
+`
+
+func (q *Queries) GetPermissionByName(ctx context.Context, name string) (Permission, error) {
+	row := q.db.QueryRow(ctx, getPermissionByName, name)
+	var i Permission
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Description,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getRole = `-- name: GetRole :one
+SELECT id, name, description, created_at FROM roles WHERE id = $1
+`
+
+func (q *Queries) GetRole(ctx context.Context, id int32) (Role, error) {
+	row := q.db.QueryRow(ctx, getRole, id)
+	var i Role
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Description,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getRoleByName = `-- name: GetRoleByName :one
+SELECT id, name, description, created_at FROM roles WHERE name = $1
+`
+
+func (q *Queries) GetRoleByName(ctx context.Context, name string) (Role, error) {
+	row := q.db.QueryRow(ctx, getRoleByName, name)
+	var i Role
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Description,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
 const getUser = `-- name: GetUser :one
@@ -86,6 +248,164 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 	return i, err
 }
 
+const listPermissions = `-- name: ListPermissions :many
+SELECT id, name, description, created_at FROM permissions ORDER BY created_at DESC
+`
+
+func (q *Queries) ListPermissions(ctx context.Context) ([]Permission, error) {
+	rows, err := q.db.Query(ctx, listPermissions)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Permission
+	for rows.Next() {
+		var i Permission
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Description,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPermissionsByRole = `-- name: ListPermissionsByRole :many
+SELECT p.id, p.name, p.description, p.created_at
+FROM permissions p
+JOIN role_permissions rp ON rp.permission_id = p.id
+WHERE rp.role_id = $1
+ORDER BY p.name
+`
+
+func (q *Queries) ListPermissionsByRole(ctx context.Context, roleID int32) ([]Permission, error) {
+	rows, err := q.db.Query(ctx, listPermissionsByRole, roleID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Permission
+	for rows.Next() {
+		var i Permission
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Description,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPermissionsByUser = `-- name: ListPermissionsByUser :many
+SELECT DISTINCT p.id, p.name, p.description, p.created_at
+FROM permissions p
+JOIN role_permissions rp ON rp.permission_id = p.id
+JOIN user_roles ur       ON ur.role_id = rp.role_id
+WHERE ur.user_id = $1
+ORDER BY p.name
+`
+
+func (q *Queries) ListPermissionsByUser(ctx context.Context, userID int32) ([]Permission, error) {
+	rows, err := q.db.Query(ctx, listPermissionsByUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Permission
+	for rows.Next() {
+		var i Permission
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Description,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRoles = `-- name: ListRoles :many
+SELECT id, name, description, created_at FROM roles ORDER BY created_at DESC
+`
+
+func (q *Queries) ListRoles(ctx context.Context) ([]Role, error) {
+	rows, err := q.db.Query(ctx, listRoles)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Role
+	for rows.Next() {
+		var i Role
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Description,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRolesByUser = `-- name: ListRolesByUser :many
+SELECT r.id, r.name, r.description, r.created_at
+FROM roles r
+JOIN user_roles ur ON ur.role_id = r.id
+WHERE ur.user_id = $1
+ORDER BY r.name
+`
+
+func (q *Queries) ListRolesByUser(ctx context.Context, userID int32) ([]Role, error) {
+	rows, err := q.db.Query(ctx, listRolesByUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Role
+	for rows.Next() {
+		var i Role
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Description,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUsers = `-- name: ListUsers :many
 SELECT id, email, username, password, salt, created_at FROM users ORDER BY created_at DESC
 `
@@ -115,4 +435,69 @@ func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const listUsersByRole = `-- name: ListUsersByRole :many
+SELECT u.id, u.email, u.username, u.password, u.salt, u.created_at
+FROM users u
+JOIN user_roles ur ON ur.user_id = u.id
+WHERE ur.role_id = $1
+ORDER BY u.created_at DESC
+`
+
+func (q *Queries) ListUsersByRole(ctx context.Context, roleID int32) ([]User, error) {
+	rows, err := q.db.Query(ctx, listUsersByRole, roleID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []User
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.Username,
+			&i.Password,
+			&i.Salt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const revokePermissionFromRole = `-- name: RevokePermissionFromRole :exec
+DELETE FROM role_permissions
+WHERE role_id = $1 AND permission_id = $2
+`
+
+type RevokePermissionFromRoleParams struct {
+	RoleID       int32
+	PermissionID int32
+}
+
+func (q *Queries) RevokePermissionFromRole(ctx context.Context, arg RevokePermissionFromRoleParams) error {
+	_, err := q.db.Exec(ctx, revokePermissionFromRole, arg.RoleID, arg.PermissionID)
+	return err
+}
+
+const revokeRoleFromUser = `-- name: RevokeRoleFromUser :exec
+DELETE FROM user_roles
+WHERE user_id = $1 AND role_id = $2
+`
+
+type RevokeRoleFromUserParams struct {
+	UserID int32
+	RoleID int32
+}
+
+func (q *Queries) RevokeRoleFromUser(ctx context.Context, arg RevokeRoleFromUserParams) error {
+	_, err := q.db.Exec(ctx, revokeRoleFromUser, arg.UserID, arg.RoleID)
+	return err
 }
