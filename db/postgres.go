@@ -15,7 +15,7 @@ type PostgresDB struct {
 }
 
 func setupDatabase(ctx context.Context) (*Queries, func(), *pgx.Conn) {
-	fmt.Println("establishing database connection...", os.Getenv("LOV_DATABASE_URL"))
+	fmt.Println("establishing database connection...")
 	conn, err := pgx.Connect(ctx, os.Getenv("LOV_DATABASE_URL"))
 	if err != nil {
 		panic(err)

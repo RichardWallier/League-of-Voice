@@ -14,8 +14,9 @@ func SetupRoutes(handlers *handler.Handlers) *chi.Mux {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Timeout(60 * time.Second))
 
-	UsersRoutes(r, handlers)
-	AuthRoutes(r, handlers)
+	UsersRoutes(r, handlers.UserHandler)
+	AuthRoutes(r, handlers.AuthHandler)
+	WebSocketRoutes(r, handlers.WebSocketHandler)
 	//UserMetricRoutes(r)
 
 	fmt.Println("routers registered")

@@ -6,15 +6,14 @@ type Services struct {
 	UserService *UserService
 	AuthService *AuthService
 	TokenService *TokenService
+	WebSocketService *WebSocketService
 }
 
 func NewServices(e *entity.Entities) *Services{
-	userService := NewUserService(e.UserEntity)
-	authService := NewAuthService(e.AuthEntity, e.UserEntity)
-	tokenService := NewTokenService(e.TokenEntity, e.UserEntity)
 	return &Services{
-		userService,
-		authService,
-		tokenService,
+		NewUserService(e.UserEntity),
+		NewAuthService(e.AuthEntity, e.UserEntity),
+		NewTokenService(e.TokenEntity, e.UserEntity),
+		NewWebSocketService(),
 	}
 }
