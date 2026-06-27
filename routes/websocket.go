@@ -6,6 +6,6 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func WebSocketRoutes(chi *chi.Mux, websocketHandler *handler.WebSocketHandler) {
-	chi.Get("/ws", websocketHandler.ConnectWebSocket)
+func SFURoutes(chi *chi.Mux, sfuhandler *handler.SFUHandler) {
+	chi.Get("/ws", sfuhandler.Connect)
 }

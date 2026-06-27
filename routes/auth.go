@@ -6,7 +6,7 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func AuthRoutes(chi *chi.Mux, authHandler *handler.AuthHandler) {
-	chi.Post("/auth/login", authHandler.LoginHandler)
-	chi.Post("/auth/register", authHandler.RegisterHandler)
+func AuthRoutes(r chi.Router, authHandler *handler.AuthHandler) {
+	r.Post("/auth/login", authHandler.LoginHandler)
+	r.Post("/auth/register", authHandler.RegisterHandler)
 }

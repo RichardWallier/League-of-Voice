@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Voice Call Test (SFU)</title>
+    <style>
+      body {
+        font-family: monospace;
+        max-width: 600px;
+        margin: 2rem auto;
+        padding: 0 1rem;
+      }
+      #log {
+        background: #111;
+        color: #0f0;
+        padding: 1rem;
+        height: 300px;
+        overflow-y: auto;
+        white-space: pre-wrap;
+      }
+      button {
+        padding: 0.5rem 1rem;
+        font-size: 1rem;
+        cursor: pointer;
+      }
+      .row {
+        margin: 0.5rem 0;
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+      }
+      .status {
+        font-weight: bold;
+      }
+      .status.open {
+        color: green;
+      }
+      .status.closed {
+        color: red;
+      }
+    </style>
+  </head>
+  <body>
+    <h2>Voice Call Test (SFU)</h2>
+    <div>
+      Status: <span id="status" class="status closed">disconnected</span>
+    </div>
+    <div>My ID: <span id="myId">-</span></div>
+    <div>Remote streams: <span id="peers-list">none</span></div>
+
+    <div class="row">
+      <button onclick="joinCall()">Join Call</button>
+      <button onclick="leaveCall()">Leave</button>
+      <button id="muteBtn" onclick="toggleMute()">Mute</button>
+    </div>
+
+    <div id="log"></div>
+    <div id="audio-container"></div>
+
+    <script>
+      // SFU client: ONE PeerConnection to the server. The server drives negotiation —
+      // it sends the offer, we answer. We never call createOffer().
+      // Protocol envelope: { event, data } where data is a JSON string.
+      //   server -> us:  "offer", "candidate"
+      //   us -> server:  "answer", "candidate"
+
+      // Cosmetic label so you can tell tabs apart in the logs — NOT sent to the server.
+      const myId = Math.random().toString(36).slice(2, 8);
+      document.getElementById('myId').textContent = myId;
+
+      // The Go server uses an empty webrtc.Configuration (no ICE servers). STUN here is
+      // harmless and helps once you test beyond localhost; remove it for pure-local tests.
+      const ICE_SERVERS = {
+        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+      };
+
+      let ws = null;
+      let pc = null;
+      let localStream = null;
+      let muted = false;
+      let remoteCount = 0;
+      // ICE candidates that arrive before we've applied the offer get buffered, then flushed
+      // once the remote description is set (addIceCandidate throws if called too early).
+      const pendingCandidates = [];
+
+      const logEl = document.getElementById('log');
+      const statusEl = document.getElementById('status');
+
+      function log(msg) {
+        const time = new Date().toLocaleTimeString();
+        logEl.textContent += `[${time}] ${msg}\n`;
+        logEl.scrollTop = logEl.scrollHeight;
+      }
+
+      function setStatus(text, cls) {
+        statusEl.textContent = text;
+        statusEl.className = 'status ' + cls;
+      }
+
+      function updateRemoteCount() {
+        document.getElementById('peers-list').textContent =
+          remoteCount > 0 ? String(remoteCount) : 'none';
+      }
+
+      function send(msg) {
+        if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
+      }
+
+      async function joinCall() {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          log('[ws] already connected');
+          return;
+        }
+
+        // 1. Mic only — audio-only SFU.
+        try {
+          localStream = await navigator.mediaDevices.getUserMedia({
+            audio: true,
+            video: false,
+          });
+          log('[mic] acquired');
+        } catch (e) {
+          log(`[error] mic access denied: ${e.message}`);
+          return;
+        }
+
+        // 2. One PeerConnection to the SFU. Push our mic track up.
+        pc = new RTCPeerConnection(ICE_SERVERS);
+        localStream.getTracks().forEach((t) => pc.addTrack(t, localStream));
+
+        // 3. Trickle our ICE candidates to the server (event "candidate").
+        pc.onicecandidate = (e) => {
+          if (e.candidate)
+            send({ event: 'candidate', data: JSON.stringify(e.candidate) });
+        };
+
+        // 4. The server fans out every other participant's audio to us as remote tracks —
+        //    one <audio> element per remote stream.
+        pc.ontrack = (e) => {
+          const stream = e.streams[0];
+          if (!stream) return;
+          log(`[audio] receiving stream ${stream.id.slice(0, 6)}`);
+
+          let el = document.getElementById(`audio-${stream.id}`);
+          if (!el) {
+            el = document.createElement('audio');
+            el.id = `audio-${stream.id}`;
+            el.autoplay = true;
+            document.getElementById('audio-container').appendChild(el);
+            remoteCount++;
+            updateRemoteCount();
+          }
+          el.srcObject = stream;
+
+          // When a participant leaves, the server removes their track → drop the element.
+          stream.onremovetrack = () => {
+            const node = document.getElementById(`audio-${stream.id}`);
+            if (node) {
+              node.remove();
+              remoteCount = Math.max(0, remoteCount - 1);
+              updateRemoteCount();
+            }
+          };
+        };
+
+        pc.onconnectionstatechange = () => {
+          log(`[peer] ${pc.connectionState}`);
+          if (pc.connectionState === 'connected') setStatus('in call', 'open');
+          else if (
+            pc.connectionState === 'failed' ||
+            pc.connectionState === 'disconnected'
+          )
+            setStatus('connection lost', 'closed');
+        };
+
+        // 5. Open signaling. No "join" message — the server starts offering on connect.
+        // Derive the WS URL from the page's own origin: ws:// on localhost, wss:// when the
+        // page is served over HTTPS (behind the tunnel / reverse proxy). Requires the page
+        // and the /ws endpoint to be served from the SAME origin (same host:port).
+        const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+        ws = new WebSocket(`${wsProto}//${location.host}/ws`);
+
+        ws.onopen = () => {
+          setStatus('connected', 'open');
+          log('[ws] connected — waiting for server offer');
+        };
+
+        ws.onmessage = async (evt) => {
+          let msg;
+          try {
+            msg = JSON.parse(evt.data);
+          } catch {
+            return;
+          }
+
+          if (msg.event === 'offer') {
+            log('[offer] received from server');
+            await pc.setRemoteDescription(JSON.parse(msg.data));
+
+            // Flush any candidates that arrived before the offer.
+            for (const c of pendingCandidates.splice(0)) {
+              try {
+                await pc.addIceCandidate(c);
+              } catch (e) {
+                log(`[ice] ${e.message}`);
+              }
+            }
+
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            send({ event: 'answer', data: JSON.stringify(pc.localDescription) });
+            log('[answer] sent');
+          } else if (msg.event === 'candidate') {
+            const candidate = JSON.parse(msg.data);
+            if (!pc.remoteDescription) {
+              pendingCandidates.push(candidate); // too early — buffer it
+              return;
+            }
+            try {
+              await pc.addIceCandidate(candidate);
+            } catch (e) {
+              log(`[ice] ${e.message}`);
+            }
+          }
+        };
+
+        ws.onerror = () => log('[ws] error');
+        ws.onclose = () => {
+          setStatus('disconnected', 'closed');
+          log('[ws] closed');
+        };
+      }
+
+      function leaveCall() {
+        // SFU has no "leave" message — closing the socket lets the server detect the drop
+        // and clean up our peer.
+        if (pc) {
+          pc.close();
+          pc = null;
+        }
+        if (localStream) {
+          localStream.getTracks().forEach((t) => t.stop());
+          localStream = null;
+        }
+        if (ws) {
+          ws.close();
+          ws = null;
+        }
+
+        document.getElementById('audio-container').innerHTML = '';
+        pendingCandidates.length = 0;
+        remoteCount = 0;
+        updateRemoteCount();
+        setStatus('disconnected', 'closed');
+        log('[call] left');
+      }
+
+      function toggleMute() {
+        if (!localStream) return;
+        muted = !muted;
+        localStream.getAudioTracks().forEach((t) => (t.enabled = !muted));
+        document.getElementById('muteBtn').textContent = muted
+          ? 'Unmute'
+          : 'Mute';
+        log(`[mic] ${muted ? 'muted' : 'unmuted'}`);
+      }
+    </script>
+  </body>
+</html>

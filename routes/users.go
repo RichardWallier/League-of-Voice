@@ -6,8 +6,8 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func UsersRoutes(chi *chi.Mux, userHandler *handler.UserHandler) {
-	chi.Get("/Users", userHandler.GetAllUsersHandler)
+func UsersRoutes(r chi.Router, userHandler *handler.UserHandler) {
+	r.Get("/Users", userHandler.GetAllUsersHandler)
 
-	chi.Get("/Users/me", userHandler.GetCurrentUserHandler)
+	r.Get("/Users/me", userHandler.GetCurrentUserHandler)
 }
