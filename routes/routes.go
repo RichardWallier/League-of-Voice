@@ -19,6 +19,7 @@ func SetupRoutes(handlers *handler.Handlers) *chi.Mux {
 		r.Use(middleware.Timeout(60 * time.Second))
 		UsersRoutes(r, handlers.UserHandler)
 		AuthRoutes(r, handlers.AuthHandler)
+		HealthCheckRoutes(r)
 	})
 
 	SFURoutes(r, handlers.SFUHandler)
