@@ -1,0 +1,19 @@
+# Prebuilt local binaries — never ship these into the build context
+lov
+server.exe
+*.exe
+
+# Local-only / dev artifacts
+tmp/
+test-client.html
+*.md
+.DS_Store
+
+# VCS & CI
+.git
+.github
+
+# Container build files themselves
+Dockerfile
+.dockerignore
+docker-compose.yml

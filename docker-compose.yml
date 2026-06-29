@@ -1,0 +1,25 @@
+# Deploy this on the VPS:  docker compose up -d
+# Put LOV_DATABASE_URL in a .env file next to this compose file.
+
+services:
+  api:
+    image: ghcr.io/richardwallier/league-of-voice:latest
+    # Host networking: the Pion SFU binds UDP ports for WebRTC media directly
+    # on the host, plus :3000 for HTTP/WS signaling. No port mapping needed.
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      LOV_DATABASE_URL: ${LOV_DATABASE_URL}
+    labels:
+      # Only containers with this label are watched/updated by Watchtower.
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  watchtower:
+    image: containrrr/watchtower:latest
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Reuses `docker login ghcr.io` creds on the host so Watchtower can
+      # pull from GHCR (required if the package stays private).
+      - /root/.docker/config.json:/config.json:ro
+    command: --interval 60 --cleanup --label-enable
