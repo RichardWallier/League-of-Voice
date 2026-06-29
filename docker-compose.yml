@@ -42,7 +42,9 @@ services:
       - "com.centurylinklabs.watchtower.enable=true"
 
   watchtower:
-    image: containrrr/watchtower:latest
+    # Maintained fork of the abandoned containrrr/watchtower; uses a current
+    # Docker API client so no DOCKER_API_VERSION workaround is needed.
+    image: ghcr.io/nicholas-fedor/watchtower:latest
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
