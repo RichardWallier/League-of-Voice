@@ -2,7 +2,6 @@ package service
 
 import (
 	"encoding/json"
-	"log"
 	"sync"
 	"time"
 
@@ -47,13 +46,11 @@ func (t *threadSafeWriter) WriteJSON(v any) error {
 }
 
 func (s *SFUService) Join(unsafeConn *websocket.Conn) {
-	log.Printf("[ws] new connection joined: %s", unsafeConn.RemoteAddr())
 	c := &threadSafeWriter{unsafeConn, sync.Mutex{}}
 	defer c.Close()
 
 	peerConnection, err := webrtc.NewPeerConnection(webrtc.Configuration{})
 	if err != nil {
-		log.Printf("[ws] failed to create peer connection for %s: %v", unsafeConn.RemoteAddr(), err)
 		return
 	}
 	defer peerConnection.Close()
@@ -62,7 +59,6 @@ func (s *SFUService) Join(unsafeConn *websocket.Conn) {
 		webrtc.RTPCodecTypeAudio,
 		webrtc.RTPTransceiverInit{Direction: webrtc.RTPTransceiverDirectionRecvonly},
 	); err != nil {
-		log.Printf("[ws] failed to add audio transceiver for %s: %v", unsafeConn.RemoteAddr(), err)
 		return
 	}
 
@@ -82,12 +78,10 @@ func (s *SFUService) Join(unsafeConn *websocket.Conn) {
 	})
 
 	peerConnection.OnConnectionStateChange(func (p webrtc.PeerConnectionState) {
-		log.Printf("[ws] peer connection state changed for %s: %s", unsafeConn.RemoteAddr(), p.String())
-
 		switch p {
 			case webrtc.PeerConnectionStateFailed:
 			if err := peerConnection.Close(); err != nil {
-				log.Printf("Failed to close PeerConnection: %v", err)
+				return
 			}
 			case webrtc.PeerConnectionStateClosed:
 				s.signalPeerConnections()
@@ -96,10 +90,8 @@ func (s *SFUService) Join(unsafeConn *websocket.Conn) {
 	})
 
 	peerConnection.OnTrack(func (t *webrtc.TrackRemote, r *webrtc.RTPReceiver) {
-		log.Printf("[ws] new track received for %s: %s", unsafeConn.RemoteAddr(), t.ID())
 		tracklocal := s.addTrack(t)
 		if tracklocal == nil {
-			log.Printf("[ws] failed to add track for %s", unsafeConn.RemoteAddr())
 			return
 		}
 		defer s.removeTrack(tracklocal)
@@ -107,21 +99,17 @@ func (s *SFUService) Join(unsafeConn *websocket.Conn) {
 		rtpPkt := &rtp.Packet{}
 		buf := make([]byte, 1500)
 		for {
-			log.Printf("tracks: %d", len(s.trackLocals))
 			i, _, err := t.Read(buf)
 			if err != nil {
-				log.Printf("[ws] read failed for %s: %v", unsafeConn.RemoteAddr(), err)
 				return
 			}
 
 			if err = rtpPkt.Unmarshal(buf[:i]); err != nil {
-				log.Printf("[ws] failed to unmarshal RTP packet for %s: %v", unsafeConn.RemoteAddr(), err)
 				return
 			}
 			rtpPkt.Extension = false
 			rtpPkt.Extensions = nil;
 			if err = tracklocal.WriteRTP(rtpPkt); err != nil {
-				log.Printf("[ws] failed to write RTP packet for %s: %v", unsafeConn.RemoteAddr(), err)
 				return
 			}
 		}
@@ -133,13 +121,10 @@ func (s *SFUService) Join(unsafeConn *websocket.Conn) {
 	for {
 		_, raw, err := c.ReadMessage()
 		if err != nil {
-			log.Printf("[ws] read failed for %s: %v", unsafeConn.RemoteAddr(), err)
 			return
 		}
 
-		log.Printf("[ws] received message from %s: %s", unsafeConn.RemoteAddr(), string(raw))
 		if err := json.Unmarshal(raw, message); err != nil {
-			log.Printf("[ws] failed to unmarshal message from %s: %v", unsafeConn.RemoteAddr(), err)
 			return
 		}
 
@@ -147,30 +132,23 @@ func (s *SFUService) Join(unsafeConn *websocket.Conn) {
 			case "candidate":
 				candidate := webrtc.ICECandidateInit{}
 				if err := json.Unmarshal([]byte(message.Data), &candidate); err != nil {
-					log.Printf("[ws] failed to unmarshal candidate from %s: %v", unsafeConn.RemoteAddr(), err)
 					return
 				}
 
-				log.Printf("[ws] adding ICE candidate for %s: %v", unsafeConn.RemoteAddr(), candidate)
 				if err := peerConnection.AddICECandidate(candidate); err != nil {
-					log.Printf("[ws] failed to add ICE candidate for %s: %v", unsafeConn.RemoteAddr(), err)
 					return
 				}
 
 			case "answer":
 				answer := webrtc.SessionDescription{}
 				if err := json.Unmarshal([]byte(message.Data), &answer); err != nil {
-					log.Printf("[ws] failed to unmarshal answer from %s: %v", unsafeConn.RemoteAddr(), err)
 					return
 				}
 
-				log.Printf("[ws] setting remote description for %s: %v", unsafeConn.RemoteAddr(), answer)
 				if err := peerConnection.SetRemoteDescription(answer); err != nil {
-					log.Printf("[ws] failed to set remote description for %s: %v", unsafeConn.RemoteAddr(), err)
 					return
 				}
 			default:
-				log.Printf("[ws] unknown event from message: %+v", message)
 		}
 	}
 	// end for loop
@@ -185,7 +163,6 @@ func (s *SFUService) addTrack(t *webrtc.TrackRemote) *webrtc.TrackLocalStaticRTP
 
 	trackLocal, err := webrtc.NewTrackLocalStaticRTP(t.Codec().RTPCodecCapability, t.ID(), t.StreamID())
 	if err != nil {
-		log.Printf("[ws] failed to create local track for %s: %v", t.ID(), err)
 		return nil
 	}
 	s.trackLocals[t.ID()] = trackLocal
@@ -221,7 +198,6 @@ func (s *SFUService) signalPeerConnections() {
 				existingSenders[sender.Track().ID()] = true
 				if _, ok := s.trackLocals[sender.Track().ID()]; !ok {
 					if err := s.peerConnections[i].peerConnection.RemoveTrack(sender); err != nil {
-						log.Printf("[ws] failed to remove track for %s: %v", s.peerConnections[i].websocketConn.RemoteAddr(), err)
 						return true
 					}
 				}
@@ -239,7 +215,6 @@ func (s *SFUService) signalPeerConnections() {
 			for _, trackLocal := range s.trackLocals {
 				if _, ok := existingSenders[trackLocal.ID()]; !ok {
 					if _, err := s.peerConnections[i].peerConnection.AddTrack(trackLocal); err != nil {
-						log.Printf("[ws] failed to add track for %s: %v", s.peerConnections[i].websocketConn.RemoteAddr(), err)
 						return true
 					}
 				}
@@ -247,12 +222,10 @@ func (s *SFUService) signalPeerConnections() {
 
 			offer, err := s.peerConnections[i].peerConnection.CreateOffer(nil)
 			if err != nil {
-				log.Printf("[ws] failed to create offer for %s: %v", s.peerConnections[i].websocketConn.RemoteAddr(), err)
 				return true
 			}
 
 			if err := s.peerConnections[i].peerConnection.SetLocalDescription(offer); err != nil {
-				log.Printf("[ws] failed to set local description for %s: %v", s.peerConnections[i].websocketConn.RemoteAddr(), err)
 				return true
 			}
 
@@ -261,7 +234,6 @@ func (s *SFUService) signalPeerConnections() {
 				Event: "offer",
 				Data:  string(offerString),
 			}); err != nil {
-				log.Printf("[ws] failed to send offer for %s: %v", s.peerConnections[i].websocketConn.RemoteAddr(), err)
 				return true
 			}
 		}

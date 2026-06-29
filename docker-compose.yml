@@ -17,6 +17,13 @@ services:
       - pgdata:/var/lib/postgresql/data
       # schema.sql runs ONCE, only when the data volume is first created.
       - ./schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      # Marks the container "healthy" only once Postgres accepts connections,
+      # so api can wait for it instead of crash-looping on startup.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     # No watchtower label -> the database is never auto-updated.
 
   api:
@@ -26,7 +33,8 @@ services:
     network_mode: host
     restart: unless-stopped
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     environment:
       LOV_DATABASE_URL: ${LOV_DATABASE_URL}
     labels:
@@ -40,7 +48,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       # Reuses `docker login ghcr.io` creds on the host so Watchtower can
       # pull from GHCR (required if the package stays private).
-      - /root/.docker/config.json:/config.json:ro
+      - ${HOME}/.docker/config.json:/config.json:ro
     command: --interval 60 --cleanup --label-enable
 
 volumes:

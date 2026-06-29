@@ -174,11 +174,10 @@
         };
 
         // 5. Open signaling. No "join" message — the server starts offering on connect.
-        // Derive the WS URL from the page's own origin: ws:// on localhost, wss:// when the
-        // page is served over HTTPS (behind the tunnel / reverse proxy). Requires the page
-        // and the /ws endpoint to be served from the SAME origin (same host:port).
-        const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-        ws = new WebSocket(`${wsProto}//${location.host}/ws`);
+        // Point straight at the VPS SFU (no TLS yet -> plain ws://). Once Phase 7
+        // (Caddy/HTTPS) is done, switch this to `wss://api.yourdomain.com`.
+        const SFU_HOST = '124.198.128.73:3000';
+        ws = new WebSocket(`ws://${SFU_HOST}/ws`);
 
         ws.onopen = () => {
           setStatus('connected', 'open');
