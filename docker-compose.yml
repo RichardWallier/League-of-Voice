@@ -1,13 +1,32 @@
 # Deploy this on the VPS:  docker compose up -d
-# Put LOV_DATABASE_URL in a .env file next to this compose file.
+# Put secrets in a .env file next to this compose file (chmod 600).
 
 services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    # Bind to localhost only -> Postgres is NOT reachable from the internet.
+    # The host-networked api reaches it at 127.0.0.1:5432.
+    ports:
+      - "127.0.0.1:5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # schema.sql runs ONCE, only when the data volume is first created.
+      - ./schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    # No watchtower label -> the database is never auto-updated.
+
   api:
     image: ghcr.io/richardwallier/league-of-voice:latest
     # Host networking: the Pion SFU binds UDP ports for WebRTC media directly
     # on the host, plus :3000 for HTTP/WS signaling. No port mapping needed.
     network_mode: host
     restart: unless-stopped
+    depends_on:
+      - db
     environment:
       LOV_DATABASE_URL: ${LOV_DATABASE_URL}
     labels:
@@ -23,3 +42,6 @@ services:
       # pull from GHCR (required if the package stays private).
       - /root/.docker/config.json:/config.json:ro
     command: --interval 60 --cleanup --label-enable
+
+volumes:
+  pgdata:
