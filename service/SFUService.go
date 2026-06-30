@@ -55,6 +55,16 @@ func (s *SFUService) Join(unsafeConn *websocket.Conn) {
 	}
 	defer peerConnection.Close()
 
+	pingTicker := time.NewTicker(30 * time.Second)
+	defer pingTicker.Stop()
+	go func() {
+	    for range pingTicker.C {
+	        if err := c.WriteControl(websocket.PingMessage, nil, time.Now().Add(10*time.Second)); err != nil {
+	            return // connection gone — stop pinging
+	        }
+	    }
+	}()
+
 	if _, err := peerConnection.AddTransceiverFromKind(
 		webrtc.RTPCodecTypeAudio,
 		webrtc.RTPTransceiverInit{Direction: webrtc.RTPTransceiverDirectionRecvonly},
