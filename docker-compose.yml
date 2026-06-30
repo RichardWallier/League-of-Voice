@@ -1,5 +1,14 @@
-# Deploy this on the VPS:  docker compose up -d
-# Put secrets in a .env file next to this compose file (chmod 600).
+# API stack for the VPS. Deploy:  docker compose up -d
+#
+# TLS / reverse proxy is handled by nginx on the host (NOT in this stack).
+# nginx should proxy the api domain -> http://127.0.0.1:3000 (with WS upgrade for /ws).
+#
+# Files that must sit next to this one in ~/lov on the VPS:
+#   .env         secrets (chmod 600): POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB, LOV_DATABASE_URL
+#   schema.sql   copied from the api repo's db/schema.sql (first-boot DB init)
+#
+# Note: the single Watchtower defined here watches the whole Docker host, so it
+# also auto-updates the separately-composed `chat` container (via its label).
 
 services:
   db:
@@ -49,7 +58,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       # Reuses `docker login ghcr.io` creds on the host so Watchtower can
-      # pull from GHCR (required if the package stays private).
+      # pull from GHCR (required if the packages stay private).
       - ${HOME}/.docker/config.json:/config.json:ro
     command: --interval 60 --cleanup --label-enable
 

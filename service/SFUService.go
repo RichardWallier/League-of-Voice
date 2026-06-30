@@ -187,6 +187,7 @@ func (s *SFUService) signalPeerConnections() {
 	attemptSync := func () (tryAgain bool) {
 		for i := range s.peerConnections {
 			if s.peerConnections[i].peerConnection.ConnectionState() == webrtc.PeerConnectionStateClosed {
+				 s.peerConnections = append(s.peerConnections[:i], s.peerConnections[i+1:]...)
 				return true
 			}
 			existingSenders := map[string]bool{}
